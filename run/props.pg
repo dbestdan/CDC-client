@@ -1,0 +1,5 @@
+db=postgres
+driver=org.postgresql.Driver
+conn=jdbc:postgresql://pcnode3:/benchmarksql
+user=benchmarksql
+password=benchmarksql
