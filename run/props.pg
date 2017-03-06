@@ -1,6 +1,7 @@
 db=postgres
 driver=org.postgresql.Driver
-databaseUrl=jdbc:postgresql://pcnode3:/benchmarksql
+databaseUrl=jdbc:postgresql://pcnode3:5432/benchmarksql
 userName=benchmarksql
 password=benchmarksql
 numberOfTerminal=9
+latestRecordCsvFile=run/latest_record.csv
