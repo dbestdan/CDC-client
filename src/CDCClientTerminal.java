@@ -1,100 +1,105 @@
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 
 public class CDCClientTerminal implements Runnable {
-	
-	private String databaseUrl ="";
-	private String userName ="";
-	private String password ="";
-	private String driver ="";
-	private String latestRecordCsvFile ="";
-	private Long latestRecordIdFromCsv;
-	private Long latestRecordIdFromDatabase;
+	Connection conn = null;
+	Long initialCursorPoint = null;
+	Long finalCursorPoint = null;
+	Long currentCursorPoint = null;
+	Long nextCursorPoint = null;
+	int numberOfRecordsPerIteration = 0;
+	String changedDataRecordFileUrl = null;
+	File changedDataRecordFileCsv = null;
+	PrintWriter changedDataRecordFileWriter = null;
+	ResultSetMetaData resultSetMetaData = null;
+	Statement stmt = null;
 
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		new CDCClientTerminal();
-		
+	public CDCClientTerminal(Connection conn, Long initialCursorPoint, Long finalCursorPoint,
+			int numberOfRecordsPerIteration, String changedDataRecordFileUrl) {
+		this.conn = conn;
+		this.initialCursorPoint = initialCursorPoint;
+		this.finalCursorPoint = finalCursorPoint;
+		this.numberOfRecordsPerIteration = numberOfRecordsPerIteration;
+		this.currentCursorPoint = initialCursorPoint;
+		this.changedDataRecordFileUrl = changedDataRecordFileUrl;
 	}
-	
-	public CDCClientTerminal(){
-		Properties prop = new Properties();
-		try{
-			prop.load(new FileInputStream(System.getProperty("prop")));
-		} catch (IOException e) {
-			System.out.println("Couldn't load property file");
-		}
-		
-		databaseUrl = prop.getProperty("databaseUrl");
-		userName = prop.getProperty("userName");
-		password = prop.getProperty("password");
-		driver = prop.getProperty("driver");
-		latestRecordCsvFile = prop.getProperty("latestRecordCsvFile");
+
+	public void run() {
+
+		// create a file for storing the data
 		try {
-			Connection conn = CDCConnection.getConnection(databaseUrl, driver, userName, password);
-			if(conn!=null){
-				System.out.println("connection successful");
+			changedDataRecordFileCsv = new File(changedDataRecordFileUrl);
+			changedDataRecordFileCsv.createNewFile(); // if already exists
+														// it will do
+														// nothing
+			changedDataRecordFileWriter = new PrintWriter(changedDataRecordFileCsv);
+
+		} catch (IOException ioe) {
+			System.out.println("Cannot create change data record file: " + changedDataRecordFileUrl);
+			ioe.printStackTrace();
+
+		}
+
+		// stop thread if it is end of the record
+		while (currentCursorPoint != finalCursorPoint) {
+			currentCursorPoint = currentCursorPoint + 1;
+			nextCursorPoint = currentCursorPoint + numberOfRecordsPerIteration;
+
+			if (finalCursorPoint < nextCursorPoint) {
+				nextCursorPoint = finalCursorPoint;
 			}
-			latestRecordIdFromCsv = getLatestRecordIdFromCsv(latestRecordCsvFile);
-			latestRecordIdFromDatabase = CDCConnection.getLatestRecordIdFromDatabase(conn);
-			System.out.println("csv: "+ latestRecordIdFromCsv);
-			System.out.println("database: " + latestRecordIdFromCsv);
-		} catch (SQLException se){
-			System.out.println("Couldn't connect to the database");
-			se.printStackTrace();
-		} catch (ClassNotFoundException cnfe){
-			System.out.println("Unable to load database driver");
-			cnfe.printStackTrace();
+
+			ResultSet rs = CDCConnection.getChangedDataInGivenRange(conn, currentCursorPoint, nextCursorPoint);
+			try {
+				resultSetMetaData = rs.getMetaData();
+				int numberOfColumns = resultSetMetaData.getColumnCount();
+				/*
+				StringBuilder columnHeaderStringBuilder = new StringBuilder();
+				for (int i = 1; i <= numberOfColumns; i++) {
+					columnHeaderStringBuilder.append(resultSetMetaData.getColumnName(i));
+					columnHeaderStringBuilder.append("§");
+				}
+
+				if (columnHeaderStringBuilder.length() > 0)
+					columnHeaderStringBuilder.setLength(columnHeaderStringBuilder.length() - 1);
+
+				changedDataRecordFileWriter.println(columnHeaderStringBuilder);
+				*/
+
+				while (rs.next()) {
+					StringBuilder rowStringBuilder = new StringBuilder();
+					for (int i = 1; i <= numberOfColumns; i++) {
+						rowStringBuilder.append(rs.getString(i));
+						rowStringBuilder.append("§");
+					}
+					changedDataRecordFileWriter.println(rowStringBuilder);
+					if (rowStringBuilder.length() > 0)
+						rowStringBuilder.setLength(rowStringBuilder.length() - 1);
+				}
+
+			} catch (SQLException sqle) {
+				System.out.println("Problem in reading data from logged_actions table");
+				sqle.printStackTrace();
+
+			}
+
+			currentCursorPoint = nextCursorPoint;
 		}
 		
-		
+		changedDataRecordFileWriter.close();
+
+		System.out.println("end of terminal");
 
 	}
-	
-	public void run(){
-		try {
-			Connection conn = CDCConnection.getConnection(databaseUrl, driver, userName, password);
-	
-		}catch (SQLException se){
-			System.out.println("Couldn't connect to the database");
-			se.printStackTrace();
-		}catch (ClassNotFoundException cnfe){
-			System.out.println("Unable to load database driver");
-			cnfe.printStackTrace();
-		}
-	}
-	
-	
-	/**
-	 * Function to return latest id of the record 
-	 * migrated to data ware house
-	 * 
-	 */
 
-	public Long getLatestRecordIdFromCsv(String fileUrl){
-        String line = "";
-        String cvsSplitBy = ",";
-        Long recordId = new Long(0);
-
-        try (BufferedReader br = new BufferedReader(new FileReader(latestRecordCsvFile))) {
-
-            while ((line = br.readLine()) != null) {
-
-                // use comma as separator
-                String[] changedRecord = line.split(cvsSplitBy);
-                recordId = new Long(changedRecord[1]);               
-
-            }
-
-        } catch (IOException e) {
-        	System.out.println("Couldn't read CSV file");
-            e.printStackTrace();
-        }
-        return recordId;
-	}
 }
