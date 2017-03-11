@@ -5,8 +5,19 @@ userName=benchmarksql
 password=benchmarksql
 numberOfTerminals=16
 numberOfRecordsPerIteration=1000
-latestRecordCsvFileUrl=run/latest_record.csv
 changedDataRecordFileUrl=changedData/changed_data_file_
+latestRecordCsvFileUrl=run/latest_record.csv
+currentFileIdCsvFileUrs=run/current_file_id.csv
+
+//when do you want to start capturing data
+firstSessionStartTimeMin=5
+
+//interval to start new session of capturing data
+sessionSleepTimeMin=5
+
+//To run specified minute
+runMins=30
+
 changedDataFile2=run/changed_data_file_2.csv
 changedDataFile3=run/changed_data_file_3.csv
 changedDataFile4=run/changed_data_file_4.csv

@@ -23,15 +23,17 @@ public class CDCClientTerminal implements Runnable {
 	PrintWriter changedDataRecordFileWriter = null;
 	ResultSetMetaData resultSetMetaData = null;
 	Statement stmt = null;
+	CDCClient parent = null;
 
 	public CDCClientTerminal(Connection conn, Long initialCursorPoint, Long finalCursorPoint,
-			int numberOfRecordsPerIteration, String changedDataRecordFileUrl) {
+			int numberOfRecordsPerIteration, String changedDataRecordFileUrl, CDCClient parent) {
 		this.conn = conn;
 		this.initialCursorPoint = initialCursorPoint;
 		this.finalCursorPoint = finalCursorPoint;
 		this.numberOfRecordsPerIteration = numberOfRecordsPerIteration;
 		this.currentCursorPoint = initialCursorPoint;
 		this.changedDataRecordFileUrl = changedDataRecordFileUrl;
+		this.parent = parent;
 	}
 
 	public void run() {
@@ -82,9 +84,11 @@ public class CDCClientTerminal implements Runnable {
 						rowStringBuilder.append(rs.getString(i));
 						rowStringBuilder.append("§");
 					}
-					changedDataRecordFileWriter.println(rowStringBuilder);
+					
 					if (rowStringBuilder.length() > 0)
 						rowStringBuilder.setLength(rowStringBuilder.length() - 1);
+					
+					changedDataRecordFileWriter.println(rowStringBuilder);
 				}
 
 			} catch (SQLException sqle) {
@@ -96,9 +100,16 @@ public class CDCClientTerminal implements Runnable {
 			currentCursorPoint = nextCursorPoint;
 		}
 		
+		try{
+			conn.close();
+		} catch (SQLException sqle) {
+			System.out.println("Problem in reading data from logged_actions table");
+			sqle.printStackTrace();
+
+		}
 		changedDataRecordFileWriter.close();
 
-		System.out.println("end of terminal");
+		parent.signalTerminalEnded(this);
 
 	}
 
